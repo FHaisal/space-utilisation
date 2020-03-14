@@ -8,145 +8,166 @@ import time
 import dlib
 import cv2
 
-CLASSES = ["background", "aeroplane", "bicycle", "bird", "boat",
-           "bottle", "bus", "car", "cat", "chair", "cow", "diningtable",
-           "dog", "horse", "motorbike", "person", "pottedplant", "sheep",
-           "sofa", "train", "tvmonitor"]
 
-net = cv2.dnn.readNetFromCaffe('model/MobileNetSSD_deploy.prototxt', 'model/MobileNetSSD_deploy.caffemodel')
+class PeopleCounter:
+    def __init__(self, video_url=None, record_url=None, max_disappeared=40, max_distance=50):
+        self.CLASSES = ["background", "aeroplane", "bicycle", "bird", "boat",
+                        "bottle", "bus", "car", "cat", "chair", "cow", "diningtable",
+                        "dog", "horse", "motorbike", "person", "pottedplant", "sheep",
+                        "sofa", "train", "tvmonitor"]
 
-video = True
+        self.net = cv2.dnn.readNetFromCaffe('model/MobileNetSSD_deploy.prototxt',
+                                            'model/MobileNetSSD_deploy.caffemodel')
 
-if video:
-    vs = cv2.VideoCapture('videos/example_02.mp4')
-else:
-    vs = VideoStream(src=0).start()
-    time.sleep(2.0)
-
-
-W, H = None, None
-
-ct = CentroidTracker(maxDisappeared=40, maxDistance=50)
-trackers = []
-trackableObjects = {}
-
-totalFrames = 0
-totalExited = 0
-totalEntered = 0
-
-fps = FPS().start()
-
-while True:
-    frame = vs.read()
-
-    frame = frame[1] if video else frame
-
-    if video and frame is None:
-        break
-
-    frame = imutils.resize(frame, width=500)
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-    if W is None or H is None:
-        (H, W) = frame.shape[:2]
-
-    status = "Waiting"
-    rects = []
-
-    if totalFrames % 30 == 0:
-        status = "Detecting"
-        trackers = []
-
-        blob = cv2.dnn.blobFromImage(frame, 0.007843, (W, H), 127.5)
-        net.setInput(blob)
-        detections = net.forward()
-
-        for i in np.arange(0, detections.shape[2]):
-            confidence = detections[0, 0, i, 2]
-
-            if confidence > 0.6:
-                idx = int(detections[0, 0, i, 1])
-
-                if CLASSES[idx] != "person":
-                    continue
-
-                box = detections[0, 0, i, 3:7] * np.array([W, H, W, H])
-                (startX, startY, endX, endY) = box.astype("int")
-
-                tracker = dlib.correlation_tracker()
-                rect = dlib.rectangle(startX, startY, endX, endY)
-                tracker.start_track(rgb, rect)
-
-                trackers.append(tracker)
-    else:
-        for tracker in trackers:
-            status = "Tracking"
-
-            tracker.update(rgb)
-            pos = tracker.get_position()
-
-            startX = int(pos.left())
-            startY = int(pos.top())
-            endX = int(pos.right())
-            endY = int(pos.bottom())
-
-            rects.append((startX, startY, endX, endY))
-
-    cv2.line(frame, (0, H // 2), (W, H // 2), (0, 255, 255), 2)
-
-    objects = ct.update(rects)
-
-    for (objectID, centroid) in objects.items():
-        to = trackableObjects.get(objectID, None)
-
-        if to is None:
-            to = TrackableObject(objectID, centroid)
+        if video_url:
+            self.stream = cv2.VideoCapture(video_url)
         else:
-            y = [c[1] for c in to.centroids]
-            direction = centroid[1] - np.mean(y)
-            to.centroids.append(centroid)
+            self.stream = VideoStream(src=0).start()
+            time.sleep(2.0)
 
-            if not to.counted:
-                if direction < 0 and centroid[1] < H // 2:
-                    totalEntered += 1
-                    to.counted = True
-                elif direction > 0 and centroid[1] > H // 2:
-                    totalExited += 1
-                    to.counted = True
-        trackableObjects[objectID] = to
+        self.width, self.height = None, None
 
-        text = "ID {}".format(objectID)
-        cv2.putText(frame, text, (centroid[0] - 10, centroid[1] - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-        cv2.circle(frame, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
+        self.video_url = video_url
+        self.centroid_tracker = CentroidTracker(maxDisappeared=max_disappeared, maxDistance=max_distance)
+        self.trackers = []
+        self.trackable_objects = {}
 
-    info = [
-        ("Entered", totalEntered),
-        ("Exited", totalExited),
-        ("Status", status),
-    ]
+        self.total_frames = 0
+        self.total_exited = 0
+        self.total_entered = 0
 
-    for (i, (k, v)) in enumerate(info):
-        text = "{}: {}".format(k, v)
-        cv2.putText(frame, text, (10, H - ((i * 20) + 20)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        self.fps = FPS().start()
 
-    cv2.imshow("Frame", frame)
-    key = cv2.waitKey(1) & 0xFF
+        self.record_url = record_url
+        self.writer = None
 
-    if key == ord("q"):
-        break
+    def start(self, frames=30, accuracy=0.5):
+        while True:
+            frame = self.stream.read()
+            frame = frame[1] if self.video_url else frame
 
-    totalFrames += 1
-    fps.update()
+            if self.video_url and frame is None:
+                break
 
-fps.stop()
-print("[INFO] elapsed time: {:.2f}".format(fps.elapsed()))
-print("[INFO] approx. FPS: {:.2f}".format(fps.fps()))
+            frame = imutils.resize(frame, width=500)
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-if video:
-    vs.release()
-else:
-    vs.stop()
+            if self.width is None or self.height is None:
+                (self.height, self.width) = frame.shape[:2]
 
-cv2.destroyAllWindows()
+            if self.record_url and self.writer is None:
+                fourcc = cv2.VideoWriter_fourcc(*"MJPG")
+                self.writer = cv2.VideoWriter(self.record_url, fourcc, 30,
+                                              (self.width, self.height), True)
+
+            status = 'Waiting'
+            rects = []
+
+            if self.total_frames % frames == 0:
+                status = 'Detecting'
+                self.trackers = []
+
+                blob = cv2.dnn.blobFromImage(frame, 0.007843, (self.width, self.height), 127.5)
+                self.net.setInput(blob)
+                detections = self.net.forward()
+
+                for i in np.arange(0, detections.shape[2]):
+                    confidence = detections[0, 0, i, 2]
+
+                    if confidence > accuracy:
+                        index = int(detections[0, 0, i, 1])
+
+                        if self.CLASSES[index] != 'person':
+                            continue
+
+                        box = detections[0, 0, i, 3:7] * np.array([self.width, self.height, self.width, self.height])
+                        (start_x, start_y, end_x, end_y) = box.astype('int')
+
+                        tracker = dlib.correlation_tracker()
+                        rect = dlib.rectangle(start_x, start_y, end_x, end_y)
+                        tracker.start_track(rgb, rect)
+
+                        self.trackers.append(tracker)
+            else:
+                for tracker in self.trackers:
+                    status = 'Tracking'
+                    tracker.update(rgb)
+                    pos = tracker.get_position()
+
+                    start_x = int(pos.left())
+                    start_y = int(pos.top())
+                    end_x = int(pos.right())
+                    end_y = int(pos.bottom())
+
+                    rects.append((start_x, start_y, end_x, end_y))
+
+            cv2.line(frame, (0, self.height // 2), (self.width, self.height // 2), (0, 255, 255), 2)
+
+            objects = self.centroid_tracker.update(rects)
+
+            for (object_id, centroid) in objects.items():
+                trackable_object = self.trackable_objects.get(object_id, None)
+
+                if trackable_object is None:
+                    trackable_object = TrackableObject(object_id, centroid)
+                else:
+                    y = [c[1] for c in trackable_object.centroids]
+                    direction = centroid[1] - np.mean(y)
+                    trackable_object.centroids.append(centroid)
+
+                    if not trackable_object.counted:
+                        if direction < 0 and centroid[1] < self.height // 2:
+                            self.total_entered += 1
+                            trackable_object.counted = True
+                        elif direction > 0 and centroid[1] > self.height // 2:
+                            self.total_exited += 1
+                            trackable_object.counted = True
+
+                self.trackable_objects[object_id] = trackable_object
+
+                text = f'ID {object_id}'
+                cv2.putText(frame, text, (centroid[0] - 10, centroid[1] - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                cv2.circle(frame, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
+
+            info = [
+                ("Entered", self.total_entered),
+                ("Exited", self.total_exited),
+                ("Status", status),
+            ]
+
+            for (i, (title, value)) in enumerate(info):
+                text = f'{title}: {value}'
+                cv2.putText(frame, text, (10, self.height - ((i * 20) + 20)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
+            if self.writer is not None:
+                self.writer.write(frame)
+
+            cv2.imshow('People Counter', frame)
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                self.stop()
+                break
+
+            self.total_frames += 1
+            self.fps.update()
+
+    def stop(self):
+        self.fps.stop()
+        print(f'Elapsed time: {self.fps.elapsed()}')
+        print(f'Approx. FPS: {self.fps.fps()}')
+
+        if self.writer:
+            self.writer.release()
+
+        if self.video_url:
+            self.stream.release()
+        else:
+            self.stream.stop()
+
+        cv2.destroyAllWindows()
+
+
+people_counter = PeopleCounter(video_url='videos/example_02.mp4')
+people_counter.start()
