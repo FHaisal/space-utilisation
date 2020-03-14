@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project version="4">
-  <component name="ProjectModuleManager">
-    <modules>
-      <module fileurl="file://$PROJECT_DIR$/../OpenCV Examples/people-counting-opencv/.idea/people-counting-opencv.iml" filepath="$PROJECT_DIR$/../OpenCV Examples/people-counting-opencv/.idea/people-counting-opencv.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/space-utilisation.iml" filepath="$PROJECT_DIR$/.idea/space-utilisation.iml" />
-    </modules>
-  </component>
-</project>
