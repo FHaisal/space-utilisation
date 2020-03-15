@@ -101,7 +101,7 @@ class PeopleCounter:
 
                     rects.append((start_x, start_y, end_x, end_y))
 
-            cv2.line(frame, (0, self.height // 2), (self.width, self.height // 2), (0, 255, 255), 2)
+            cv2.line(frame, (0, self.height // 2), (self.width, self.height // 2), (0, 0, 0), 2)
 
             objects = self.centroid_tracker.update(rects)
 
@@ -133,13 +133,12 @@ class PeopleCounter:
             info = [
                 ("Entered", self.total_entered),
                 ("Exited", self.total_exited),
-                ("Status", status),
             ]
 
             for (i, (title, value)) in enumerate(info):
                 text = f'{title}: {value}'
                 cv2.putText(frame, text, (10, self.height - ((i * 20) + 20)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
 
             if self.writer is not None:
                 self.writer.write(frame)
@@ -169,5 +168,5 @@ class PeopleCounter:
         cv2.destroyAllWindows()
 
 
-people_counter = PeopleCounter(video_url='videos/example_02.mp4')
+people_counter = PeopleCounter(video_url='videos/example_01.mp4', record_url='output/test.avi')
 people_counter.start()
