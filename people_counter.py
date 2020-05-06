@@ -7,6 +7,7 @@ import imutils
 import time
 import dlib
 import cv2
+from utility import update_json, update_csv
 
 
 class PeopleCounter:
@@ -18,6 +19,9 @@ class PeopleCounter:
 
         self.net = cv2.dnn.readNetFromCaffe('model/MobileNetSSD_deploy.prototxt',
                                             'model/MobileNetSSD_deploy.caffemodel')
+
+        # self.net = cv2.dnn.readNetFromCaffe('model/mobilenet_v2_deploy.prototxt',
+        #                                     'model/mobilenet_v2.caffemodel')
 
         if video_url:
             self.stream = cv2.VideoCapture(video_url)
@@ -60,11 +64,9 @@ class PeopleCounter:
                 self.writer = cv2.VideoWriter(self.record_url, fourcc, 30,
                                               (self.width, self.height), True)
 
-            status = 'Waiting'
             rects = []
 
             if self.total_frames % frames == 0:
-                status = 'Detecting'
                 self.trackers = []
 
                 blob = cv2.dnn.blobFromImage(frame, 0.007843, (self.width, self.height), 127.5)
@@ -90,7 +92,6 @@ class PeopleCounter:
                         self.trackers.append(tracker)
             else:
                 for tracker in self.trackers:
-                    status = 'Tracking'
                     tracker.update(rgb)
                     pos = tracker.get_position()
 
@@ -117,9 +118,11 @@ class PeopleCounter:
 
                     if not trackable_object.counted:
                         if direction < 0 and centroid[1] < self.height // 2:
+                            # TODO: Append to csv file?
                             self.total_entered += 1
                             trackable_object.counted = True
                         elif direction > 0 and centroid[1] > self.height // 2:
+                            # TODO: Append to csv file?
                             self.total_exited += 1
                             trackable_object.counted = True
 
@@ -168,5 +171,5 @@ class PeopleCounter:
         cv2.destroyAllWindows()
 
 
-people_counter = PeopleCounter(video_url='videos/example_01.mp4', record_url='output/test.avi')
+people_counter = PeopleCounter(video_url='videos/example_01.mp4')
 people_counter.start()
