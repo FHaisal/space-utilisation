@@ -118,13 +118,18 @@ class PeopleCounter:
 
                     if not trackable_object.counted:
                         if direction < 0 and centroid[1] < self.height // 2:
-                            # TODO: Append to csv file?
                             self.total_entered += 1
                             trackable_object.counted = True
+
+                            update_json('entered')
+                            update_csv('entered')
+
                         elif direction > 0 and centroid[1] > self.height // 2:
-                            # TODO: Append to csv file?
                             self.total_exited += 1
                             trackable_object.counted = True
+
+                            update_json('exited')
+                            update_csv('exited')
 
                 self.trackable_objects[object_id] = trackable_object
 

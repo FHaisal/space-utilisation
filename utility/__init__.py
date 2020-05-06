@@ -3,7 +3,7 @@ from datetime import datetime
 
 
 def update_json(value):
-    with open('log.json', 'r+') as file:
+    with open('./output/log.json', 'r+') as file:
         data = json.load(file)
 
         if value == 'entered':
@@ -24,5 +24,5 @@ def update_json(value):
 
 
 def update_csv(value):
-    with open(r'log.csv', 'a') as file:
+    with open(r'./output/log.csv', 'a') as file:
         file.writelines(f'{datetime.now()},{value}\n')
