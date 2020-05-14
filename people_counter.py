@@ -11,7 +11,7 @@ from utility import update_json, update_csv
 
 
 class PeopleCounter:
-    def __init__(self, video_url=None, record_url=None, max_disappeared=40, max_distance=50):
+    def __init__(self, video_url=None, raspi=False, record_url=None, max_disappeared=40, max_distance=50):
         self.CLASSES = ["background", "aeroplane", "bicycle", "bird", "boat",
                         "bottle", "bus", "car", "cat", "chair", "cow", "diningtable",
                         "dog", "horse", "motorbike", "person", "pottedplant", "sheep",
@@ -20,17 +20,18 @@ class PeopleCounter:
         self.net = cv2.dnn.readNetFromCaffe('model/MobileNetSSD_deploy.prototxt',
                                             'model/MobileNetSSD_deploy.caffemodel')
 
-        # self.net = cv2.dnn.readNetFromCaffe('model/mobilenet_v2_deploy.prototxt',
-        #                                     'model/mobilenet_v2.caffemodel')
-
         if video_url:
-            self.stream = cv2.VideoCapture(video_url)
+            if raspi:
+                self.stream = cv2.VideoCapture(video_url, cv2.CAP_FFMPEG)
+            else:
+                self.stream = cv2.VideoCapture(video_url)
         else:
             self.stream = VideoStream(src=0).start()
             time.sleep(2.0)
 
         self.width, self.height = None, None
 
+        self.raspi = raspi
         self.video_url = video_url
         self.centroid_tracker = CentroidTracker(maxDisappeared=max_disappeared, maxDistance=max_distance)
         self.trackers = []
@@ -45,7 +46,7 @@ class PeopleCounter:
         self.record_url = record_url
         self.writer = None
 
-    def start(self, frames=30, accuracy=0.5):
+    def start(self, frames=10, accuracy=0.5):
         while True:
             frame = self.stream.read()
             frame = frame[1] if self.video_url else frame
@@ -102,7 +103,7 @@ class PeopleCounter:
 
                     rects.append((start_x, start_y, end_x, end_y))
 
-            cv2.line(frame, (0, self.height // 2), (self.width, self.height // 2), (0, 0, 0), 2)
+            cv2.line(frame, (0, self.height // 2), (self.width, self.height // 2), (0, 255, 0), 2)
 
             objects = self.centroid_tracker.update(rects)
 
@@ -116,20 +117,24 @@ class PeopleCounter:
                     direction = centroid[1] - np.mean(y)
                     trackable_object.centroids.append(centroid)
 
+                    location = None
+                    if self.video_url and not self.raspi:
+                        location = self.video_url
+
                     if not trackable_object.counted:
                         if direction < 0 and centroid[1] < self.height // 2:
                             self.total_entered += 1
                             trackable_object.counted = True
 
-                            update_json('entered')
-                            update_csv('entered')
+                            update_json('entered', location)
+                            update_csv('entered', location)
 
                         elif direction > 0 and centroid[1] > self.height // 2:
                             self.total_exited += 1
                             trackable_object.counted = True
 
-                            update_json('exited')
-                            update_csv('exited')
+                            update_json('exited', location)
+                            update_csv('exited', location)
 
                 self.trackable_objects[object_id] = trackable_object
 
@@ -146,7 +151,7 @@ class PeopleCounter:
             for (i, (title, value)) in enumerate(info):
                 text = f'{title}: {value}'
                 cv2.putText(frame, text, (10, self.height - ((i * 20) + 20)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
             if self.writer is not None:
                 self.writer.write(frame)
@@ -162,8 +167,6 @@ class PeopleCounter:
 
     def stop(self):
         self.fps.stop()
-        print(f'Elapsed time: {self.fps.elapsed()}')
-        print(f'Approx. FPS: {self.fps.fps()}')
 
         if self.writer:
             self.writer.release()
@@ -174,7 +177,3 @@ class PeopleCounter:
             self.stream.stop()
 
         cv2.destroyAllWindows()
-
-
-people_counter = PeopleCounter(video_url='videos/example_01.mp4')
-people_counter.start()
